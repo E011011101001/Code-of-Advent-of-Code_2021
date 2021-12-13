@@ -1,5 +1,6 @@
 import * as fs from 'fs'
-import { pipeline } from 'stream'
+
+type Coord = [number, number]
 
 const dataset = fs.readFileSync(
   './in.txt', {
@@ -12,61 +13,32 @@ const heightMap = dataset.map(row => (row.push(10), row.unshift(10), row))
 heightMap.push(Array(heightMap[0].length).fill(10))
 heightMap.unshift(Array(heightMap[0].length).fill(10))
 
-const MapWithLowMarked = heightMap.map(row => row.map(point => ({
-  height: point,
-  low: false
-}))).map((row, i) => row.map((point, j) => {
-  if (point.height !== 10) {
-    if (
-      point.height < heightMap[i - 1][j] &&
-      point.height < heightMap[i + 1][j] &&
-      point.height < heightMap[i][j - 1] &&
-      point.height < heightMap[i][j + 1]
-    ) {
-      point.low = true
-    }
-  }
-  return point
-}))
+const adjacent_coords = (i: number, j: number) => [
+  [i - 1, j],
+  [i + 1, j],
+  [i, j - 1],
+  [i, j + 1]
+]
+const coordsOfLow = heightMap.reduce(
+  (coordsOfLow, row, i) => coordsOfLow.concat(row.reduce(
+    (coordsOfLow, locHeight, j) => (
+      locHeight !== 10 && adjacent_coords(i, j).reduce((isLow, [x, y]) => isLow && locHeight < heightMap[x][y], true)
+    ) ? (coordsOfLow.concat([[i, j]])) : (coordsOfLow), [] as [number, number][]
+  )), [] as [number, number][]
+)
 
 console.log(`Part 1: ${
-  MapWithLowMarked.reduce((sum, row) => sum + row.reduce((sum, point) => point.low ? (sum + point.height + 1) : sum, 0), 0)
+  coordsOfLow.reduce((sum, [i, j]) => sum + heightMap[i][j] + 1, 0)
 }`)
 
-const isIncluded = heightMap.map(row => row.map(point => false))
+const converge = (includedLocs: Set<string>, [i, j]: Coord): Set<string> => adjacent_coords(i, j).filter(
+    ([x, y]) => heightMap[x][y] < 9 && !includedLocs.has([x, y].join(',')) && heightMap[x][y] >= heightMap[i][j]
+  ).reduce(converge, includedLocs.add([i, j].join(',')))
 
 console.log(`Part 2: ${
-  MapWithLowMarked.reduce(
-    (basinSizes, row, i) => basinSizes.concat(row.reduce(
-      (basinSizes, point, j) => {
-        if (point.low) {
-          let basinSize = 0
-          isIncluded[i][j] = true
-          const searchStack: [number, number][] = [[i, j]]
-          while (searchStack.length) {
-            ++basinSize
-            const [i, j] = searchStack.shift()
-            const higherLocs = ([
-              [i - 1, j],
-              [i + 1, j],
-              [i, j - 1],
-              [i, j + 1]
-            ] as [number, number][]).filter(coords => {
-              const [x, y] = coords
-              if (heightMap[x][y] < 9 /* bounds checking included*/ && !isIncluded[x][y]) {
-                return heightMap[x][y] >= heightMap[i][j]
-              }
-              return false
-            })
-            higherLocs.forEach(([x, y]) => isIncluded[x][y] = true)
-            searchStack.push(...higherLocs)
-          }
-          basinSizes.push(basinSize)
-          return basinSizes
-        } else {
-          return basinSizes
-        }
-      }
-    , [] as number[]))
-  , [] as number[]).sort((a, b) => b - a).slice(0, 3).reduce((mul, size) => mul * size)
+  coordsOfLow
+    .map(coords => [coords].reduce(converge, new Set<string>()).size)
+    .sort((a, b) => b - a)
+    .slice(0, 3)
+    .reduce((mul, size) => mul * size)
 }`)
